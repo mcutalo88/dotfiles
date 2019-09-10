@@ -1,0 +1,121 @@
+#! /bin/bash
+
+alias k="kubectl"
+alias kg="k get"
+alias kpods="k get pods -o wide"
+alias kpodsbroke="k get pods --field-selector=status.phase!=Running"
+alias kpa="k get pods -o wide --all-namespaces"
+alias kservices="k get services"
+alias kd="k get deployments"
+alias krc="k get replicationcontroller"
+alias ks="k get secrets"
+alias klogs="k logs -f"
+alias ktail="kubetail"
+alias kexec="k exec -it"
+alias kdesc="k describe"
+alias kwatchpods="watch kubectl get pods -o wide --include-uninitialized=true"
+
+alias dnstools="kubectl run -it --rm --restart=Never --image=docker.io/infoblox/dnstools:latest dnstools"
+
+# kpa | sed 's/|/ /' | awk '{print $4}' | frequency
+# kpa | grep nats-service | awk '{print $2 " --namespace=" $1}' | xargs -n2 echo kubectl delete pod
+
+
+kdrainnow() {
+  k drain $1 --grace-period=0 --delete-local-data --force --ignore-daemonsets
+}
+
+kcontext() {
+  context=$(grep current-context: ~/.kube/config | awk 'NF>1{print $NF}')
+  ns=$(grep -A 1 "cluster: $context" ~/.kube/config | awk 'FNR == 2 {print $2}')
+  echo "[${context}|${ns}]"
+}
+
+kswitch() {
+  k config use-context $1
+}
+
+kns() {
+  context=$(kubectl config current-context)
+  k config set-context $context --namespace=$1
+}
+
+podcount() {
+  nodes=$(kubectl get node --no-headers -o custom-columns=NAME:.metadata.name)
+
+  for node in $nodes; do
+    echo "Node: $node"
+    kubectl describe node "$node" | sed '1,/Non-terminated Pods/d'
+    # echo
+  done
+}
+
+kslay() {
+  pods=( $(kubectl get pods --all-namespaces | grep $1 | awk '{print $2 " --namespace=" $1}' | xargs -n2 echo kubectl delete pod) )
+  echo "${#pods[@]}"
+}
+
+kprune() {
+  if [[ -z $1 ]] ; then
+    echo "Must specify pod search"
+    return
+  fi
+
+  pods=( $(kubectl get pods | grep $1 | awk 'FNR > 0 {print $1}') )
+
+  echo "${#pods[@]} Pods Found ... staging for deletion."
+  printf '\t%s\n' "${pods[@]}"
+
+  echo -n "Are you sure you want to delete? (y/n): "
+  read delete
+
+  if [[ "$delete" = "y" ]] ; then
+    for (( i=0; i<=${#pods[@]}; i++ )); do
+      echo "${pods[i]}"
+      kubectl delete pod ${pods[i]} --grace-period 0
+      # sleep $sleepy
+    done
+  else
+    echo "Cancelling ..."
+  fi
+}
+
+kcon() {
+  k exec -it $1 /bin/bash
+}
+
+kreveal() {
+  k get secret $1 -o=yaml
+}
+
+kdelete() {
+  k delete service,pod,rc,deployments $1
+}
+
+kstats() {
+ nodes=( $(k get nodes | awk 'FNR > 1 {print $1}') )
+ for (( i=0; i<${#nodes[@]}; i++ )); do
+  k describe node ${nodes[i]}; 
+  #| sed -e 's/Kube-Proxy Version:\(.*\)Allocated resources:/\1/'
+  #grep -o -P '(?<=Kube-Proxy Version).*(?=Allocated resources)'
+  #| sed -n -e '/Namespace/,$p'
+ done
+}
+
+kcleanevicted(){
+  kubectl get po --all-namespaces -o json | jq  '.items[] | select(.status.reason!=null) | select(.status.reason | contains("Evicted")) | "kubectl delete pod \(.metadata.name) -n \(.metadata.namespace)"' | xargs -n 1 bash -c
+}
+
+kcleanunknown(){
+  kubectl get po --all-namespaces -o json | jq  '.items[] | select(.status.reason!=null) | select(.status.reason | contains("NodeLost")) | "kubectl delete pod \(.metadata.name) -n \(.metadata.namespace) --grace-period 0"' | xargs -n 1 bash -c
+}
+
+kdrainnow(){
+  k drain $1 --grace-period=0 --delete-local-data --force --ignore-daemonsets
+}
+
+kssh() {
+  providerid=$(kg node $1 -o jsonpath='{.spec.providerID}')
+  instanceid=${providerid##*/}
+  ssh $instanceid.ln
+}

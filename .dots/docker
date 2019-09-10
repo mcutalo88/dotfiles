@@ -1,0 +1,20 @@
+#! /bin/bash
+
+alias d="docker"
+alias dbuild="d build -t "
+alias di="d images"
+alias dp="d push"
+alias dlogs="d logs -f "
+
+dcon() {
+    d exec -it $1 /bin/$2
+}
+
+dpurge() {
+    docker rmi -f $(docker images -q)
+    docker rm -f  $(docker ps -aq)
+}
+
+ctop() {
+    docker run --rm -ti --name=ctop -v /var/run/docker.sock:/var/run/docker.sock quay.io/vektorlab/ctop:latest
+}

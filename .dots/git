@@ -1,0 +1,9 @@
+#! /bin/bash
+
+alias gch="git checkout"
+alias gp="git pull"
+alias gb="git branch -v"
+alias gs="git status"
+alias wip="git commit -v -a --no-edit --amend"
+alias gpp="git pull --prune"
+alias goagain="ga -A && gc --amend --no-edit && git push -f"
